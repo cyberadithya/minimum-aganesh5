@@ -2,6 +2,9 @@
 #include "minemu/trap.h"
 #include "minemu/trace.h"
 #include "kprintf.h"
+#include "minemu/irq.h"
+#include "msh.h"
+#include "uart.h"
 
 void minemu_kernel_main(const struct minemu_boot_info *boot_info) {
     if ((uintptr_t)boot_info != MINEMU_BOOT_INFO_VADDR ||
@@ -19,5 +22,9 @@ void minemu_kernel_main(const struct minemu_boot_info *boot_info) {
 
     kprintf("hello world\n");
 
-    minemu_fail_stop();
+    /* Turn on UART0 receive interrupts, then unmask IRQs on the CPU. */
+    uart_init();
+    minemu_irq_enable();
+
+    msh_run();
 }
