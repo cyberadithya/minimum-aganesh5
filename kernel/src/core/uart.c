@@ -58,10 +58,9 @@ void uart_init(void) {
     irq_enable_source(MINEMU_IRQ_UART0);
 }
 
-void uart_irq_handler(void) {
-    /* Runs in IRQ mode with IRQs already masked by the hardware.
-     * Read every available byte: the UART keeps its interrupt asserted
-     * while RX data remains, so stopping early would re-trigger it. */
+/* Move every byte waiting in UART0's receive queue into rx_buf.
+ * Must run with IRQs masked. */
+static void rx_drain(void) {
     while ((MINEMU_UART0->status & MINEMU_UART_STATUS_RX_READY) != 0) {
         char c = (char)(MINEMU_UART0->rx_data & 0xff);
         if (rx_head - rx_tail < RX_BUF_SIZE) {
@@ -71,6 +70,13 @@ void uart_irq_handler(void) {
         /* If the buffer is full the byte is dropped, but it was still
          * read so the hardware queue keeps draining. */
     }
+}
+
+void uart_irq_handler(void) {
+    /* Runs in IRQ mode with IRQs already masked by the hardware.
+     * Read every available byte: the UART keeps its interrupt asserted
+     * while RX data remains, so stopping early would re-trigger it. */
+    rx_drain();
 }
 
 int uart_getc(void) {
@@ -98,9 +104,13 @@ size_t uart_port_read(volatile struct minemu_uart_regs *port, char *dst, size_t 
     size_t count = 0;
 
     if (port == MINEMU_UART0) {
-        /* UART0 input is taken by the IRQ handler, so read from the
-         * software buffer. IRQs are already masked here (syscall), so the
-         * handler can't change the indices while we use them. */
+        /* UART0 input is normally taken by the IRQ handler, so read from
+         * the software buffer. IRQs are already masked here (syscall), so
+         * the handler can't change the indices while we use them.
+         * Drain the device first too: a user program that polls with
+         * back-to-back syscalls spends most of its time in the kernel with
+         * IRQs masked, so the UART interrupt may not have run yet. */
+        rx_drain();
         while (count < max && rx_tail != rx_head) {
             dst[count] = rx_buf[rx_tail % RX_BUF_SIZE];
             rx_tail++;
@@ -120,6 +130,7 @@ size_t uart_port_read(volatile struct minemu_uart_regs *port, char *dst, size_t 
 bool uart_port_rx_ready(volatile struct minemu_uart_regs *port) {
     if (port == MINEMU_UART0) {
         /* UART0 input lives in the software buffer (see above). */
+        rx_drain();
         return rx_tail != rx_head;
     }
     return (port->status & MINEMU_UART_STATUS_RX_READY) != 0;
