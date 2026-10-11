@@ -2,9 +2,8 @@
 #include "minemu/trap.h"
 #include "minemu/trace.h"
 #include "kprintf.h"
-#include "minemu/irq.h"
-#include "msh.h"
 #include "uart.h"
+#include "user.h"
 
 void minemu_kernel_main(const struct minemu_boot_info *boot_info) {
     if ((uintptr_t)boot_info != MINEMU_BOOT_INFO_VADDR ||
@@ -18,13 +17,17 @@ void minemu_kernel_main(const struct minemu_boot_info *boot_info) {
         minemu_trace_event(UINT32_C(0xb007bad0));
         minemu_fail_stop();
     }
-    minemu_trace_event(1);
 
-    kprintf("hello world\n");
-
-    /* Turn on UART0 receive interrupts, then unmask IRQs on the CPU. */
+    /* Turn on UART0 receive interrupts. CPU IRQs get unmasked when we
+     * drop to user mode (user_enter sets spsr with the I bit clear). */
     uart_init();
-    minemu_irq_enable();
 
-    msh_run();
+    uint32_t entry;
+    if (!user_load(boot_info, "minimum-user", &entry)) {
+        kprintf("kernel: could not load minimum-user\n");
+        minemu_trace_event(UINT32_C(0xbad10ad0));
+        minemu_fail_stop();
+    }
+
+    user_enter(entry, USER_STACK_TOP);
 }

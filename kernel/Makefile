@@ -12,7 +12,11 @@ CORE_OBJECT := \
 	$(BUILD)/core/kprintf.o \
 	$(BUILD)/core/irq.o \
 	$(BUILD)/core/interrupts.o \
-	$(BUILD)/core/msh.o
+	$(BUILD)/core/msh.o \
+	$(BUILD)/core/user.o \
+	$(BUILD)/core/user_entry.o \
+	$(BUILD)/core/svc.o \
+	$(BUILD)/core/syscall.o
 RUNTIME_OBJECTS := \
 	$(BUILD)/runtime/block.o \
 	$(BUILD)/runtime/exception.o \
